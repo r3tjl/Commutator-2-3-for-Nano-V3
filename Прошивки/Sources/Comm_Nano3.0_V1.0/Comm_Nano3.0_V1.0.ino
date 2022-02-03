@@ -76,7 +76,7 @@ void setup() {
   pinMode(tx1,OUTPUT);
   pinMode(tx2,OUTPUT);
 
-  pinMode(mode_key,INPUT);     //недо ли так конфигурировать вход для аналогового?
+  pinMode(mode_key,INPUT);     //надо ли так конфигурировать вход для аналогового?
   pinMode(ant_key,INPUT);
   
 
@@ -105,7 +105,7 @@ void loop() {
     //analogRead(ant_key);
     beeper();  
     beeper_err();
-    Trc1 == find_similar(analogRead(ant_key), 10, 100);
+    Trc1 = find_similar(analogRead(ant_key), 10, 100);
 //    int U1=0,U2=0;                                                                //назначаем переменные прямой и обратной волны
 //    const int COUNT = 10;                                                         //назначаем константу кол-во измерений
 //  for (byte i=0; i<COUNT; i++){                                                   //включаем цикл измерения
@@ -148,6 +148,95 @@ void loop() {
 End
 }
 //===============================================================================================
+
+//****************************функция опроса кнопок***********************************
+int keypress(){
+  boolean button  = false;           
+  boolean press_flag = false;        
+  boolean long_press_flag = false;   
+  unsigned long last_press = 0;   
+  int key_a = 0;
+  int key_b = 0;
+
+//считываем значение от кнопок выбора антенного входа (только короткие)
+  value = find_similar(analogRead(ant_key), 10, 100);
+    if (value < 100 { 
+      key_a = 1;}
+    if (value > 100 && value < 400 { 
+      key_a = 2;}
+    if (value >400 && value < 900 { 
+      key_a = 3;}
+
+//считываем значения от кнопок выбора режима (короткие и длинные)
+  value = find_similar(analogRead(mode_key), 10, 100);
+    //если нажата кнопка 1
+    if (value < 100 && press_flag == false && millis() - last_press > 100) {
+      // если кнопка была нажата и не была нажата до этого (флажок короткого нажатия = false)
+      // и с последненго нажатия прошло более 100 миллисекунд (защита от дребезга контактов) то...
+        press_flag = !press_flag;       //...поднять флажок короткого нажатия на кнопку и
+        last_press = millis();          // присвоить текущее время переменной last_press
+    }
+    if (value < 100 && press_flag == true && millis() - last_press > 1000) {
+      // если кнопку продолжают нажимать более 1 секунды, то...
+      long_press_flag = !long_press_flag;  // ...поднять флажок долгого нажатия и
+      last_press = millis();          // присвоить текущее время переменной last_press
+      // Сюда вписываем события неоходимые при длительном нажатии на кнопку
+      key_b = 4;
+    }
+    if (value > 900 && press_flag == true && long_press_flag == true) {
+      // если кнопка отпушена и была нажата длительное время, то...
+      press_flag = !press_flag;            // опустить флажок короткого нажатия
+      long_press_flag = !long_press_flag;  // и длинного нажатия
+    }
+    if (value > 900 && press_flag == true && long_press_flag == false) {
+      // если кнопка отпущена и было только короткое нажатие, то...
+      press_flag = !press_flag;  // опустить флажок короткого нажатия
+      // сюда вписываем события неоходимые при коротком нажатии на кнопку
+      key_b = 1;
+    }
+    //если нажата кнопка 2
+    if (value < 100 && press_flag == false && millis() - last_press > 100) {
+      // если кнопка была нажата и не была нажата до этого (флажок короткого нажатия = false)
+      // и с последненго нажатия прошло более 100 миллисекунд (защита от дребезга контактов) то...
+        press_flag = !press_flag;       //...поднять флажок короткого нажатия на кнопку и
+        last_press = millis();          // присвоить текущее время переменной last_press
+    }
+    if (value < 100 && press_flag == true && millis() - last_press > 1000) {
+      // если кнопку продолжают нажимать более 1 секунды, то...
+      long_press_flag = !long_press_flag;  // ...поднять флажок долгого нажатия и
+      last_press = millis();          // присвоить текущее время переменной last_press
+      // Сюда вписываем события неоходимые при длительном нажатии на кнопку
+      key_b = 4;
+    }
+    if (value > 900 && press_flag == true && long_press_flag == true) {
+      // если кнопка отпушена и была нажата длительное время, то...
+      press_flag = !press_flag;            // опустить флажок короткого нажатия
+      long_press_flag = !long_press_flag;  // и длинного нажатия
+    }
+    if (value > 900 && press_flag == true && long_press_flag == false) {
+      // если кнопка отпущена и было только короткое нажатие, то...
+      press_flag = !press_flag;  // опустить флажок короткого нажатия
+      // сюда вписываем события неоходимые при коротком нажатии на кнопку
+      key_b = 1;
+    }
+ 
+     
+    
+    if (value > 100 && value < 400 { 
+      key_a = 2;}
+    if (value >400 && value < 900 { 
+      key_a = 3;}
+
+
+  
+ 
+
+  
+
+  
+  
+  return;
+}
 
 //******************************* Подпрограмма расчета и вывода КСВ ***************************************************************  
 
