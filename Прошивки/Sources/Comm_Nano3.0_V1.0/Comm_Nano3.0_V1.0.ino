@@ -7,15 +7,30 @@
 //**************************************************************************************************************************
 #include <Wire.h>                                                                 //подключаем библиотеку Wire для I2C
 #include <LiquidCrystal_I2C.h>                                                    //подключаем библиотеку для работы с ЖКИ LCD1602 i2c
-#include <TonePlayer.h>                                                           //подключаем библиотеку вывода тона
+LiquidCrystal_I2C lcd(0x27,16,2);                                                    // Устанавливаем дисплей 16*2
+//#include <TonePlayer.h>                                                           //подключаем библиотеку вывода тона
 //#include <sav_button.h>                                                           //подключаем библиотеку кнопок
 //#include <EEPROM.h>                                                               //подключаем библиотеку для работы с EEPROM
 #include <CyberLib.h>                                                             //очень интересная библиотека, заменяет многое работа с пинами, с кнопками, со звуком и прочее...
-//#include <../fonts/FreeSansBoldOblique9pt7b.h>                                    //подключаем внешний шрифт
-//#include <OneWire.h>                                                              //подключаем библиотеку OneWire
-//OneWire ds(A2);                                                                   //назначаем вход А2 для датчика DS18B20
 
 //***************************Определяем имена пинам управления релюшками******************************************************
+#define rel_1 8
+#define rel_2 10
+#define rel_3 5
+#define rel_4 6
+#define rel_5 9
+#define rel_6 7
+#define rel_7 4
+#define rel_8 12
+//*************Определяем имена прочих пинов входов и выходов***********************
+#define ptt1 2
+#define ptt2 3
+#define tx1 A0
+#define tx2 A1
+#define mode_key A2
+#define ant_key A3
+
+#define tone_beep 1000                                                              //тональность бипера (1000-1кгц)
 
 //#define DS_UPDATE_TIME 500                                                        //время цикла опроса датчика температуры
 //#define res 5                                                                     //порт D1, сброс (очистка) памяти 
@@ -33,51 +48,52 @@
 //#define Bmax 150                                                                  //уровень яркости во время измерения
 //#define COLOR_SCALE COLOR_WHITE                                                   //цвет шкалы линий КСВ и измерителя мощности
 //TFT_22_ILI9225 tft = TFT_22_ILI9225(TFT_RST, TFT_RS, TFT_CS, TFT_LED, Bmax);      //инициализация аппаратного SPI
-TonePlayer tone1 (TCCR1A,TCCR1B,OCR1AH,OCR1AL,TCNT1H,TCNT1L);                     //используем порт D9 (Таймер 1) для подключения бипера и звуковой сигнализации (Nano)
-SButton button1(2,20,500,1000,0);                                                 //назначаем кнопку 1 на порт D2
-SButton button2(3,20,500,1000,250);                                               //назначаем кнопку 2 на порт D3
-LiquidCrystal_I2C lcd(0x27,16,2);                                                    // Устанавливаем дисплей
-//************************* Назначаем переменные ***********************************
-  int Trcv1, Trcv2 = 0;                                                             //переменная состояния линий Трансивер1 и Трансивер2
-  int PAline = 0;                                                                   //переменнаяподключения усилителя
-  
-  //unsigned long beepMillis=0;                                                     //перемнные времени бипера
-  //int  valBeep=0;                                                                 //счетчик времени сигнала
-  //int TimeBeep=10;                                                                //длительность сигнала аварии по КСВ
-  //int flag_beep=0;                                                                //флаг аварии по КСВ
-  //int flag_beeper=1;                                                              //переменная флага состояния бипера
-  //unsigned long powerMillis=0;                                                    //начальное значение времени для счетчика powerMillis
-  //int val_power=0;                                                                //счетчик времени val_power
-  
+//TonePlayer tone1 (TCCR1A,TCCR1B,OCR1AH,OCR1AL,TCNT1H,TCNT1L);                     //используем порт D9 (Таймер 1) для подключения бипера и звуковой сигнализации (Nano)
+//SButton button1(2,20,500,1000,0);                                                 //назначаем кнопку 1 на порт D2
+//SButton button2(3,20,500,1000,250);                                               //назначаем кнопку 2 на порт D3
 
+//************************* Назначаем переменные ***********************************
+  int Trcv1, Trcv2 = 0;                                                             //переменная состояния линий Трансивер1 и Трансивер2. 0 - не подкл. 1 - к А1. 2 - к А2. 3 - к А3
+  int PAline = 0;                                                                   //переменная подключения усилителя 0 - не подкл. 1 - к Тр1. 2 - к Тр2
+  
 //*********************************** Установки ***********************************
 void setup() {
-    analogReference(DEFAULT);                                                     //подключаем внутреннее опорное напряжение 5В
+  analogReference(DEFAULT);                                                     //подключаем внутреннее опорное напряжение 5В
 //    analogReference(INTERNAL);                                                    //подключаем внутреннее опорное напряжение 1.1В
-    button1.begin(); button2.begin();                                             //инициализация кнопки 1 и кнопки 2
-    pinMode(res,INPUT_PULLUP);                                                    //
-    pinMode(9,OUTPUT);                                                            //назначаем порт сигнализации D9 на вывод
-    pinMode(DivPin,OUTPUT);                                                       //назначаем вывод DivPin на выход
-    pinMode(FanPin,OUTPUT);                                                       //
-    tft.begin(); tft.setOrientation(1);                                           //инициализация дисплея, альбомная ориентация экрана
-    tft.setFont(Terminal11x16);                                                   //используем внутренний шрифт Terminal11x16
-    tft.setGFXFont(&FreeSansBoldOblique9pt7b);                                    //используем внешний шрифт FreeSansBoldOblique9pt7b
-    
-  if (digitalRead(res)==LOW){                                                     //определяем состояние кнопки сброса res
-    tft.drawGFXText(35,60,"Memory Reset...",COLOR_RED);                           //выводим текст "Memory Reset..."
-  while (digitalRead(res)==LOW){}                                                 //зацикливаемся, если кнопка еще не отпущена
-    EEPROM.update(1,0);                                                           //записываем в память значения по умолчанию
-    EEPROM.update(2,0);                                                           //----------
-    EEPROM.update(3,0);                                                           //----------
-    EEPROM.put(4,2.5);                                                            //----------
-    EEPROM.put(8,3.0);                                                            //----------
-    EEPROM.update(12,50);                                                         //----------
-    EEPROM.update(13,10);                                                         //----------
-    EEPROM.update(14,20);}                                                        //----------
+//    button1.begin(); button2.begin();                                             //инициализация кнопки 1 и кнопки 2
+  pinMode(rel_1,OUTPUT);                                                        //назначаем пины на входы и выходы
+  pinMode(rel_2,OUTPUT);  
+  pinMode(rel_3,OUTPUT);
+  pinMode(rel_4,OUTPUT);
+  pinMode(rel_5,OUTPUT);
+  pinMode(rel_6,OUTPUT);
+  pinMode(rel_7,OUTPUT);
+  pinMode(rel_8,OUTPUT);
+
+  pinMode(ptt1,INPUT);
+  pinMode(ptt2,INPUT);
+
+  pinMode(tx1,OUTPUT);
+  pinMode(tx2,OUTPUT);
+
+  pinMode(mode_key,INPUT);
+  pinMode(ant_key,INPUT);
+  
+
+//  if (digitalRead(res)==LOW){                                                     //определяем состояние кнопки сброса res
+//   while (digitalRead(res)==LOW){}                                                 //зацикливаемся, если кнопка еще не отпущена
+//    EEPROM.update(1,0);                                                           //записываем в память значения по умолчанию
+//    EEPROM.update(2,0);                                                           //----------
+//    EEPROM.update(3,0);                                                           //----------
+//    EEPROM.put(4,2.5);                                                            //----------
+//    EEPROM.put(8,3.0);                                                            //----------
+//    EEPROM.update(12,50);                                                         //----------
+//    EEPROM.update(13,10);                                                         //----------
+//    EEPROM.update(14,20);}                                                        //----------
 //*****************************Заставка приветствия*********************************************
     lcd.init();                     
       lcd.backlight();                                                            // Включаем подсветку дисплея
-      lcd.print("iarduino.ru");
+      lcd.print("Ant.commutator");
       lcd.setCursor(8, 1);
       lcd.print("LCD 1602");
 
@@ -311,7 +327,24 @@ End
 
 //**************************************** Бипер ****************************************************
 void beeper(){                                                                    //подпрограмма бипера
-    if (Tone!=0) D9_Beep(30,Tone*100);}
+//    tone(11,tone_beep);
+//    delay_ms(100);
+//    noTone(11);
+    D11_Beep(100, tone_beep);  
+    }
+void beeper_err(){
+    tone(11,tone_beep);
+    delay_ms(100);
+    noTone(11);
+    delay_ms(50);
+    tone(11,tone_beep);
+    delay_ms(100);
+    noTone(11);
+    delay_ms(500);
+    tone(11,tone_beep);
+    delay_ms(100);
+    noTone(11);
+}
 
 //****************************** Подпрограмма меню *****************************************
 //void menu() {                                                                       //подпрограмма меню настроек
