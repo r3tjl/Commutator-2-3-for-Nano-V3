@@ -150,92 +150,122 @@ End
 //===============================================================================================
 
 //****************************функция опроса кнопок***********************************
+// НЕЛЬЗЯ ВЫНОСИТЬ В ФУНКЦИЮ !!!! Переменные определяем как глобальные? 
 int keypress(){
-  boolean button  = false;           
   boolean press_flag = false;        
   boolean long_press_flag = false;   
-  unsigned long last_press = 0;   
-  int key_a = 0;
-  int key_b = 0;
+  unsigned long last_press = 0;
+  int value;   
+  int last_value = 1023;
+  int last_a = 1023;
+  int key_ant;                //это ЗНАЧЕНИЕ кнопки выбора антенны (1, 2, 3; 0-не нажата)
+  int key_mode;               //это ЗНАЧЕНИЕ кнопки режима (короткие нажатия 1, 2, 3; долгие нажатия 4, 5, 6; 0-не нажата)
 
 //считываем значение от кнопок выбора антенного входа (только короткие)
-  value = find_similar(analogRead(ant_key), 10, 100);
-    if (value < 100 { 
-      key_a = 1;}
-    if (value > 100 && value < 400 { 
-      key_a = 2;}
-    if (value >400 && value < 900 { 
-      key_a = 3;}
+  value = find_similar(analogRead(ant_key), 10, 100);   //вопрос - работает ли эта функция от дребезга библиотеки CyberLib.h ???
+                                                        //иначе - простое считывание analogRead(ant_key)
+    if (value > 900) {
+      key_a=0;}
+    if (value < 100 && last_a > 900) { 
+      key_a = 3;
+      beeper();}
+    if (value > 100 && value < 400 && last_a > 900) { 
+      key_a = 2;
+      beeper();}
+    if (value >400 && value < 900 && last_a > 900) { 
+      key_a = 1;
+      beeper();}
+    last_a = value;
 
 //считываем значения от кнопок выбора режима (короткие и длинные)
   value = find_similar(analogRead(mode_key), 10, 100);
-    //если нажата кнопка 1
+    if (value > 900 && press_flag == false && long_press_flag == false) {
+      key_b = 0;    }
+    //если нажата кнопка 3
     if (value < 100 && press_flag == false && millis() - last_press > 100) {
       // если кнопка была нажата и не была нажата до этого (флажок короткого нажатия = false)
       // и с последненго нажатия прошло более 100 миллисекунд (защита от дребезга контактов) то...
         press_flag = !press_flag;       //...поднять флажок короткого нажатия на кнопку и
         last_press = millis();          // присвоить текущее время переменной last_press
+        last_value = value;
     }
-    if (value < 100 && press_flag == true && millis() - last_press > 1000) {
+    else if (value < 100 && press_flag == true && millis() - last_press > 1000) {
       // если кнопку продолжают нажимать более 1 секунды, то...
       long_press_flag = !long_press_flag;  // ...поднять флажок долгого нажатия и
       last_press = millis();          // присвоить текущее время переменной last_press
       // Сюда вписываем события неоходимые при длительном нажатии на кнопку
-      key_b = 4;
+      key_b = 6;
+      beeper_long();
     }
-    if (value > 900 && press_flag == true && long_press_flag == true) {
+    else if (value > 900 && last_value < 100 && press_flag == true && long_press_flag == false) {
+      // если кнопка отпущена и было только короткое нажатие, то...
+      press_flag = !press_flag;  // опустить флажок короткого нажатия
+      last_press = 0;
+      last_value = 1023;
+      // сюда вписываем события неоходимые при коротком нажатии на кнопку
+      key_b = 3;
+      beeper();
+    }    
+    else if (value > 900 && press_flag == true && long_press_flag == true) {
       // если кнопка отпушена и была нажата длительное время, то...
       press_flag = !press_flag;            // опустить флажок короткого нажатия
       long_press_flag = !long_press_flag;  // и длинного нажатия
+      last_press = 0;
+      last_value = 1023;
     }
-    if (value > 900 && press_flag == true && long_press_flag == false) {
-      // если кнопка отпущена и было только короткое нажатие, то...
-      press_flag = !press_flag;  // опустить флажок короткого нажатия
-      // сюда вписываем события неоходимые при коротком нажатии на кнопку
-      key_b = 1;
-    }
+
     //если нажата кнопка 2
-    if (value < 100 && press_flag == false && millis() - last_press > 100) {
+     if (value > 100 && value < 400 && press_flag == false && millis() - last_press > 100) {
       // если кнопка была нажата и не была нажата до этого (флажок короткого нажатия = false)
       // и с последненго нажатия прошло более 100 миллисекунд (защита от дребезга контактов) то...
         press_flag = !press_flag;       //...поднять флажок короткого нажатия на кнопку и
         last_press = millis();          // присвоить текущее время переменной last_press
+        last_value = value;
     }
-    if (value < 100 && press_flag == true && millis() - last_press > 1000) {
+    else if (value > 100 && value < 400 && press_flag == true && millis() - last_press > 1000) {
+      // если кнопку продолжают нажимать более 1 секунды, то...
+      long_press_flag = !long_press_flag;  // ...поднять флажок долгого нажатия и
+      last_press = millis();          // присвоить текущее время переменной last_press
+      // Сюда вписываем события неоходимые при длительном нажатии на кнопку
+      key_b = 5;
+      beeper_long();
+    }
+    else if (value > 900 && last_value > 100 && last_value < 400 && press_flag == true && long_press_flag == false) {
+      // если кнопка отпущена и было только короткое нажатие, то...
+      press_flag = !press_flag;  // опустить флажок короткого нажатия
+      last_press = 0;
+      last_value = 1023;
+      // сюда вписываем события неоходимые при коротком нажатии на кнопку
+      key_b = 2;
+      beeper();
+    }
+      //если нажата кнопка 1
+     if (value >400 && value < 900 && press_flag == false && millis() - last_press > 100) {
+      // если кнопка была нажата и не была нажата до этого (флажок короткого нажатия = false)
+      // и с последненго нажатия прошло более 100 миллисекунд (защита от дребезга контактов) то...
+        press_flag = !press_flag;       //...поднять флажок короткого нажатия на кнопку и
+        last_press = millis();          // присвоить текущее время переменной last_press
+        last_value = value;
+    }
+    else if (value >400 && value < 900 && press_flag == true && millis() - last_press > 1000) {
       // если кнопку продолжают нажимать более 1 секунды, то...
       long_press_flag = !long_press_flag;  // ...поднять флажок долгого нажатия и
       last_press = millis();          // присвоить текущее время переменной last_press
       // Сюда вписываем события неоходимые при длительном нажатии на кнопку
       key_b = 4;
+      beeper_long();
     }
-    if (value > 900 && press_flag == true && long_press_flag == true) {
-      // если кнопка отпушена и была нажата длительное время, то...
-      press_flag = !press_flag;            // опустить флажок короткого нажатия
-      long_press_flag = !long_press_flag;  // и длинного нажатия
-    }
-    if (value > 900 && press_flag == true && long_press_flag == false) {
+    else if (value > 900 && last_value > 400 && last_value < 900 && press_flag == true && long_press_flag == false) {
       // если кнопка отпущена и было только короткое нажатие, то...
       press_flag = !press_flag;  // опустить флажок короткого нажатия
+      last_press = 0;
+      last_value = 1023;
       // сюда вписываем события неоходимые при коротком нажатии на кнопку
       key_b = 1;
+      beeper();
     }
  
-     
-    
-    if (value > 100 && value < 400 { 
-      key_a = 2;}
-    if (value >400 && value < 900 { 
-      key_a = 3;}
-
-
-  
- 
-
-  
-
-  
-  
-  return;
+  return (key_a*10)+key_b ;
 }
 
 //******************************* Подпрограмма расчета и вывода КСВ ***************************************************************  
@@ -420,24 +450,20 @@ int keypress(){
 //}
 
 //**************************************** Бипер ****************************************************
-void beeper(){                                                                    //подпрограмма бипера
-//    tone(11,tone_beep);
-//    delay_ms(100);
-//    noTone(11);
+void beeper(){                                                                
+//    tone(11,tone_beep,100);
     D11_Beep(100, tone_beep);  
-    }
+}
+void beeper_long(){                                                                
+//    tone(11,tone_beep,500);
+    D11_Beep(500, tone_beep);
+}
 void beeper_err(){
-    tone(11,tone_beep);
-    delay_ms(100);
-    noTone(11);
+    tone(11,tone_beep,100);
     delay_ms(50);
-    tone(11,tone_beep);
-    delay_ms(100);
-    noTone(11);
-    delay_ms(500);
-    tone(11,tone_beep);
-    delay_ms(100);
-    noTone(11);
+    tone(11,tone_beep,100);
+    delay_ms(50);
+    tone(11,tone_beep,100);
 }
 
 //****************************** Подпрограмма меню *****************************************
