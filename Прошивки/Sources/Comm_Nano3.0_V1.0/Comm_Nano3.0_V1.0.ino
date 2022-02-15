@@ -56,10 +56,13 @@ LiquidCrystal_I2C lcd(0x27,16,2);                                               
 //  int Trc1, Trc2 = 0;                                                             //переменная состояния линий Трансивер1 и Трансивер2. 0 - не подкл. 1 - к А1. 2 - к А2. 3 - к А3
   byte ant1, ant2, ant3 = 0;                                                        //переменные состояния антенных входов: 0 - не подкл., 1 - к Тр1, 2 - к Тр2
   byte paLine = 0;                                                                   //переменная подключения усилителя 0 - не подкл. 1 - к Тр1. 2 - к Тр2
-  volatile byte trxUprMode;                            //переменная режима управления передачей трансиверов: 0-без упр., 1-только блок., 2-упр.по текущему выбору, 3-полное управление
-                                                        //переменная используется в прерываниях
-
-  boolean actTrx1 = true;                               //переменная показывает что активным для действий является трансивер 1. Если false - то трансивер 2
+  byte trxUprMode;                            //переменная режима управления передачей трансиверов: 0-без упр., 1-только блок., 2-упр.по текущему выбору, 3-полное управление
+                                                         //переменная используется в прерываниях
+  
+  boolean tr1Tx = false;                         //флаги блокировки трансиверов (ПОД ВОПРОСОМ - возможно будут означать наоборот передачу
+  boolean tr2Tx = false;
+  
+  byte actTrx1 = 1;                               //переменная показывает что активным для действий является трансивер 1. Если false - то трансивер 2
   boolean blockMode = true;                             //переменная определяет что включен режим блокировки коммутции 
   boolean antBlockTx = false;                           //переменная определяет включен ли режим блокировки других антенн при передаче
   boolean onCommut = false;                             //флаг необходимости перекоммутации. Если true - выполняется блок коммутации
@@ -128,9 +131,9 @@ lcd.init();
 trxUprMode=EEPROM.read(1);
 if (trxUprMode < 1 || trxUprMode > 3) {
   lcd.clear();
-  lcd.print("Please set mode");
-  lcd.setCursor(0,1); 
-  lcd.print("TX Transceiver !");
+  lcd.print("Please set Trx");
+  lcd.setCursor(2,1); 
+  lcd.print("control Mode");
   beeper_err();
   delay_ms(3000);
   trxUprMode = 0; 
@@ -183,8 +186,8 @@ if (onCommut) {
   //задать функции блокировки !!!! или можно их задать в логическом блоке, а коммутацию здесь
   
   // это просто принудительная блокировка передачи любого трансивера если он не подключен к антенне НИКАК. Можно сделать и в логическом
-    if (ant1 != 1 && ant2 != 1 && ant3 != 1 && trxUprMode != 0) digitalWrite(tx1, LOW);     //нужна ли здесь проверка trxUprMode != 0  ???
-  if (ant1 != 2 && ant2 != 2 && ant3 != 2 && trxUprMode != 0) digitalWrite(tx2, LOW);
+  if (ant1 != 1 && ant2 != 1 && ant3 != 1 && trxUprMode != 0) tr1Tx = false; digitalWrite(tx1, LOW);     //нужна ли здесь проверка trxUprMode != 0  ???
+  if (ant1 != 2 && ant2 != 2 && ant3 != 2 && trxUprMode != 0) tr2Tx = false; digitalWrite(tx2, LOW);       // флаги tr1Tx, tr2Tx
 
 
   
@@ -194,7 +197,7 @@ if (onCommut) {
   
 //***************************БЛОК ИНДИКАЦИИ***********************************************************************
 
-if (actTrx1) {
+if (actTrx1 == 1) {
   lcd.setCursor(0, 1); lcd.print(" ");
   lcd.setCursor(0, 0); lcd.print(">");
 }
@@ -332,7 +335,8 @@ else lcd.print("on");
       last_value = 1023;
       // сюда вписываем события неоходимые при коротком нажатии на кнопку
       key_mode = 2; 
-      actTrx1 = !actTrx1;         //меняем переменную - циклично выбираем активнвм трансивер 1 или 2. Можно вынести в логический блок
+      if (actTrx1 == 1) actTrx1 = 2;         //меняем переменную - циклично выбираем активнвм трансивер 1 или 2. Можно вынести в логический блок
+      else actTrx1 = 1;
       beeper();
     }
       //если нажата кнопка 1 (Реж.)
@@ -365,6 +369,75 @@ else lcd.print("on");
 
 
 //************************Блок логики и безопасности ***************************************************
+
+
+//*************логика включения антенных входов ***************
+switch (ant_key) {
+  case 1:
+    if (actTrx1 == ant1) ant1 = 0; onCommut = true;           //нажатие на кнопку уже подключенной антенны - ее отключение
+    
+    if (actTrx1 == 1 && ant1 == 2) { 
+      if (blockMode) beeper_err();
+      else ant1 = 1; onCommut = true;
+    }
+    if (actTrx1 == 2 && ant1 == 1) {
+      if (blockMode) beeper_err();
+      else ant1 = 2; onCommut = true;
+    break;
+    }
+   case 2:
+    if (actTrx1 == ant2) ant2 = 0; onCommut = true;          //нажатие на кнопку уже подключенной антенны - ее отключение
+    
+    if (actTrx1 == 1 && ant2 == 2) { 
+      if (blockMode) beeper_err();
+      else ant2 = 1; onCommut = true;
+    }
+    if (actTrx1 == 2 && ant2 == 1) {
+      if (blockMode) beeper_err();
+      else ant2 = 2; onCommut = true;
+    break;
+    }    
+   case 3:
+    if (actTrx1 == ant3) ant3 = 0; onCommut = true;           //нажатие на кнопку уже подключенной антенны - ее отключение
+    
+    if (actTrx1 == 1 && ant3 == 2) { 
+      if (blockMode) beeper_err();
+      else ant3 = 1; onCommut = true;
+    break;
+    }
+    if (actTrx1 == 2 && ant3 == 1) {
+      if (blockMode) beeper_err();
+      else ant3 = 2; onCommut = true;
+    }    
+}
+
+//**отладочный модуль, исключает одинаковое включение антенн. В дальнейшем если логика не позволит так включить - можно убрать 3 аварийных сигнала
+if ((ant1 != 0 && ant1 == ant2) || (ant3 != 0 && ant1 == ant3) || (ant2 != 0 && ant2 == ant3)) {
+  beeper_err(); beeper_err(); beeper_err();
+  ant1, ant2, ant3 = 0; onCommut = true;
+}
+//*******************
+
+//*********************************логика подключения УМ ***********************************
+
+if (key_mode == 3) {
+  if (actTrx1 == paLine) paLine = 0; onCommut = true;           //нажатие на кнопку когда ум ПОДКЛЮЧЕН - отключение
+
+  if (actTrx1 == 1 && paLine == 2) { 
+      if (blockMode) beeper_err();
+      else paLine = 1; onCommut = true;
+    } 
+  if (actTrx1 == 2 && paLine == 1) { 
+      if (blockMode) beeper_err();
+      else paLine = 2; onCommut = true;
+    } 
+}
+
+if (key_mode == 4) modeTx();
+
+
+//******************************модуль блокировок***********************************
+
 
 
 
@@ -437,138 +510,47 @@ void beeper_err(){
     tone(11,tone_beep,100);
 }
 
-//****************************** Подпрограмма меню *****************************************
-//void menu() {                                                                       //подпрограмма меню настроек
-//    #define TEXT COLOR_LIGHTCYAN                                                    //цвет текста меню
-//    #define TEXT_SEL COLOR_RED                                                      //цвет выделенного пункта меню
-//    int cx=8, cy=22, dx=cx+155;                                                     //начальные координаты меню
-//    tft.clear(); tft.setBacklightBrightness(Bmax);                                  //очистка экрана, яркость подсветки Bmax
-//  for (int i=0; i<2; i++){                                                          //включаем цикл
-//    tft.drawRectangle(i, i, 219-i, 175-i, COLOR_DARKCYAN);}                         //рисуем прямоугольник по внешнему контуру ЖКИ
-//
-//    tft.drawGFXText(cx,cy,    "1. View scale",TEXT);                                //выводим текст "1. View scale"
-//    tft.drawGFXText(cx,cy+20, "2. Scale low", TEXT);                                //выводим текст "2. Scale low"
-//    tft.drawGFXText(cx,cy+40, "3. Scale hi",  TEXT);                                //выводим текст "3. Scale hi"
-//    tft.drawGFXText(cx,cy+60, "4. SWR low",   TEXT);                                //выводим текст "4. SWR low"
-//    tft.drawGFXText(cx,cy+80, "5. SWR hi",    TEXT);                                //выводим текст "5. SWR hi"
-//    tft.drawGFXText(cx,cy+100,"6. PWR round", TEXT);                                //выводим текст "6. PWR round"
-//    tft.drawGFXText(cx,cy+120,"7. PWR step",  TEXT);                                //выводим текст "7. PWR step"
-//    tft.drawGFXText(cx,cy+140,"8. Tone beep", TEXT);                                //выводим текст "8. Tone beep"
-//
-//    int Select1,Select2,Select3,Select6,Select7,Select8;                            //переменные счетчиков
-//    float Select4, Select5;                                                         //переменные счетчиков
-//    int ExitMenu=0;                                                                 //
-//    const char*view_scale[]={"1","2"};                                              //символьная константа
-//    const char*scale_low[]={"20  ","40","80","120"};                                //символьная константа
-//    const char*scale_hi[]={"200  ","400","600","800","1000"};                       //символьная константа
-//    const char*pwrstep[]={"1  ","2","5","10","50",};                                //
-//    const char*tonebeep[]={"OFF  ","100","200","300","400","500","600","700","800", //
-//    "900","1000","1100","1200","1300","1400","1500","1600","1700","1800","1900",    //
-//    "2000"};                                                                        //
-//    char buf[5]; byte len=4;                                                        //символьный массив
-//
-//    Select1=EEPROM.read(1);                                                         //читаем значение View_scale и переносим его в счетчик Select1
-//    Select2=EEPROM.read(2);                                                         //читаем значение Scale_low и переносим его в счетчик Select2
-//    Select3=EEPROM.read(3);                                                         //читаем значение Scale_hi и переносим его в счетчик Select3
-//    EEPROM.get(4,Select4);                                                          //читаем значение SWRlow и переносим его в счетчик Select4
-//    EEPROM.get(8,Select5);                                                          //читаем значение SWRhi и переносим его в счетчик Select5
-//    Select6=EEPROM.read(12);                                                        //читаем значение PWRround и переносим его в счетчик Select6
-//    PWRstep=EEPROM.read(13);                                                        //читаем значение PWRstep и переносим его в счетчик Select7
-//  if (PWRstep==1) Select7=0;                                                        //
-//  if (PWRstep==2) Select7=1;                                                        //
-//  if (PWRstep==5) Select7=2;                                                        //
-//  if (PWRstep==10)Select7=3;                                                        //
-//  if (PWRstep==50)Select7=4;                                                        //
-//    Select8=EEPROM.read(14);                                                        //читаем значение Tone и переносим его в счетчик Select8
-//
-//    tft.drawText(dx,cy-12,view_scale[Select1],TEXT);                                //выводим значение Select1
-//    tft.drawText(dx,cy+8,scale_low[Select2],TEXT);                                  //выводим значение Select2
-//    tft.drawText(dx,cy+28,scale_hi[Select3],TEXT);                                  //выводим значение Select3
-//    dtostrf(Select4,-len,1,buf); tft.drawText(dx,cy+48,buf,TEXT);                   //выводим значение Select4
-//    dtostrf(Select5,-len,1,buf); tft.drawText(dx,cy+68,buf,TEXT);                   //выводим значение Select5
-//    dtostrf(Select6*10,-len,0,buf); tft.drawText(dx,cy+88,buf+String (' '),TEXT);   //выводим значение Select6
-//    tft.drawText(dx,cy+108,pwrstep[Select7],TEXT);                                  //выводим значение Select7
-//    tft.drawText(dx,cy+128,tonebeep[Select8],TEXT);                                 //выводим значение Select8
-//
-//  do {                                                                              //включаем цикл опроса
-//switch(button1.Loop()){                                                             //при нажатии кнопки 1
-//  case SB_CLICK: beeper(); if (++position>8) position=1; break;                     //короткое нажатие,бипер, увеличиваем значение позиции на 1, ограничение до 8
-//  case SB_LONG_CLICK: beeper(); ExitMenu=1; break;}                                 //длинное нажатие, бипер, выход из меню
-//  
-//  if (position==1){tft.drawGFXText(cx,cy, "1. View scale", TEXT_SEL);               //если позиция 1, выводим "1. View scale" красным цветом
-//      tft.drawGFXText(cx,cy+140,"8. Tone beep", TEXT);                              //выводим "8. Tone beep" цветом TEXT
-//switch(button2.Loop()){                                                             //если кнопка 2 нажата
-//  case SB_CLICK: beeper(); if (++Select1>1) Select1=0; break;}                      //короткое нажатие, бипер, увеличиваем счетчик Select1 на 1, ограничиваем до 1
-//    tft.drawText(dx,cy-12,view_scale[Select1],TEXT_SEL);}                           //выводим текст из символьной константы view_scale цветом TEXT_SEL
-//  else tft.drawText(dx,cy-12,view_scale[Select1],TEXT);                             //иначе выводим текст из символьной константы view_scale цветом TEXT
-//  
-//  if (position==2){tft.drawGFXText(cx,cy+20, "2. Scale low", TEXT_SEL);             //если позиция 2, выводим "2. Scale low" красным цветом
-//      tft.drawGFXText(cx,cy,    "1. View scale",TEXT);                              //выводим "1. View scale" цветом TEXT
-//switch(button2.Loop()){                                                             //если кнопка 2 нажата
-//  case SB_CLICK: beeper(); if (++Select2>3) Select2=0; break;}                      //короткое нажатие, бипер, увеличиваем счетчик Select2 на 1, ограничиваем до 3
-//    tft.drawText(dx,cy+8,scale_low[Select2],TEXT_SEL);}                             //выводим текст из символьной константы scale_low цветом TEXT_SEL
-//  else tft.drawText(dx,cy+8,scale_low[Select2],TEXT);                               //иначе выводим текст из символьной константы scale_low цветом TEXT
-//  
-//  if (position==3){tft.drawGFXText(cx,cy+40, "3. Scale hi", TEXT_SEL);              //если позиция 3, выводим "3. Scale hi" красным цветом
-//      tft.drawGFXText(cx,cy+20, "2. Scale low", TEXT);                              //выводим "2. Scale low" цветом TEXT
-//switch(button2.Loop()){                                                             //если кнопка 2 нажата
-//  case SB_CLICK: beeper(); if (++Select3>4) Select3=0; break;}                      //короткое нажатие, бипер, увеличиваем счетчик Select3 на 1, ограничиваем до 4
-//    tft.drawText(dx,cy+28,scale_hi[Select3],TEXT_SEL);}                             //выводим текст из символьной константы scale_hi цветом TEXT_SEL
-//  else tft.drawText(dx,cy+28,scale_hi[Select3],TEXT);                               //иначе выводим текст из символьной константы scale_hi цветом TEXT
-//  
-//  if (position==4){tft.drawGFXText(cx,cy+60, "4. SWR low", TEXT_SEL);               //если позиция 4, выводим "4. SWR low" красным цветом
-//      tft.drawGFXText(cx,cy+40, "3. Scale hi", TEXT);                               //выводим "3. Scale hi" цветом TEXT
-//switch(button2.Loop()){                                                             //если кнопка 2 нажата
-//  case SB_CLICK: beeper(); Select4=Select4+0.1; if(Select4>3.0){Select4=1.0;}break;}//короткое нажатие, бипер, увеличиваем счетчик Select4 на 0.1, ограничиваем до 1.0 ... 3.0
-//  if (Select4>Select5) Select4=Select5;                                             //
-//    dtostrf(Select4,-len,1,buf); tft.drawText(dx,cy+48,buf,TEXT_SEL);}              //преобразуем значение счетчика Select4 в текст, выводим значение на экран цветом TEXT_SEL
-//  else {dtostrf(Select4,-len,1,buf); tft.drawText(dx,cy+48,buf,TEXT);}              //иначе преобразуем значение счетчика Select4 в текст, выводим значение на экран цветом TEXT
-//  
-//  if (position==5){tft.drawGFXText(cx,cy+80, "5. SWR hi", TEXT_SEL);                //если позиция 5, выводим "5. SWR hi" красным цветом
-//      tft.drawGFXText(cx,cy+60, "4. SWR low", TEXT);                                //выводим "4. SWR low" цветом TEXT
-//switch(button2.Loop()){                                                             //если кнопка 2 нажата
-//  case SB_CLICK: beeper(); Select5=Select5+0.1; if(Select5>3.0){Select5=1.5;}break;}//короткое нажатие, бипер, увеличиваем счетчик Select5 на 0.1, ограничиваем до 1.5 ... 3.0
-//    dtostrf(Select5,-len,1,buf); tft.drawText(dx,cy+68,buf,TEXT_SEL);}              //преобразуем значение счетчика Select5 в текст, выводим значение на экран цветом TEXT_SEL
-//  else {dtostrf(Select5,-len,1,buf); tft.drawText(dx,cy+68,buf,TEXT);}              //иначе преобразуем значение счетчика Select5 в текст, выводим значение на экран цветом TEXT
-//  
-//  if (position==6){tft.drawGFXText(cx,cy+100,"6. PWR round", TEXT_SEL);             //если позиция 6, выводим "6. PWR round" красным цветом
-//      tft.drawGFXText(cx,cy+80, "5. SWR hi", TEXT);                                 //выводим "5. SWR hi" цветом TEXT
-//switch(button2.Loop()){                                                             //если кнопка 2 нажата
-//  case SB_CLICK: beeper(); Select6=Select6+10; if(Select6>100){Select6=10;} break;} //короткое нажатие, бипер, увеличиваем счетчик Select6 на 10, ограничиваем до 10 ... 100
-//    dtostrf(Select6*10,-len,0,buf);                                                 //преобразуем значение счетчика Select6 в текст
-//    tft.drawText(dx,cy+88,buf+String (' '),TEXT_SEL);}                              //выводим значение на экран цветом TEXT_SEL
-//  else {dtostrf(Select6*10,-len,0,buf);                                             //иначе преобразуем значение счетчика Select6 в текст
-//    tft.drawText(dx,cy+88,buf+String (' '),TEXT);}                                  //и выводим значение на экран цветом TEXT
-//  
-//  if (position==7){tft.drawGFXText(cx,cy+120,"7. PWR step", TEXT_SEL);              //если позиция 7, выводим "7. PWR step" красным цветом
-//      tft.drawGFXText(cx,cy+100,"6. PWR round", TEXT);                              //выводим "6. PWR round" цветом TEXT
-//switch(button2.Loop()){                                                             //если кнопка 2 нажата
-//  case SB_CLICK: beeper(); if (++Select7>4){Select7=0;}                             //короткое нажатие, бипер, увеличиваем счетчик Select7 на 1, ограничиваем до 1 ... 10
-//  if (Select7==0)PWRstep=1;                                                         //
-//  if (Select7==1)PWRstep=2;                                                         //
-//  if (Select7==2)PWRstep=5;                                                         //
-//  if (Select7==3)PWRstep=10;                                                        //
-//  if (Select7==4)PWRstep=50; break;}                                                //
-//    tft.drawText(dx,cy+108,pwrstep[Select7],TEXT_SEL);}                             //выводим значение на экран цветом TEXT_SEL
-//  else {tft.drawText(dx,cy+108,pwrstep[Select7],TEXT);}                             //иначе выводим значение на экран цветом TEXT
-//  
-//  if (position==8){tft.drawGFXText(cx,cy+140,"8. Tone beep", TEXT_SEL);             //если позиция 8, выводим "8. Tone beep" красным цветом
-//      tft.drawGFXText(cx,cy+120,"7. PWR step", TEXT);                               //выводим "7. PWR step" цветом TEXT
-//switch(button2.Loop()){                                                             //если кнопка 2 нажата
-//  case SB_CLICK: if (++Select8>20){Select8=0;}                                      //короткое нажатие, увеличиваем счетчик Select8 на 10, ограничиваем до 100 ... 250
-//    Tone=Select8; if (Tone!=0) beeper(); break;                                     //переносим новое значение счетчика Select8 в Tone, бипер
-//  case SB_AUTO_CLICK: if (++Select8>20){Select8=0;}                                 //
-//    Tone=Select8; if (Tone!=0) beeper(); break;}                                    //
-//    tft.drawText(dx,cy+128,tonebeep[Select8],TEXT_SEL);}                            //преобразуем значение счетчика Select8 в текст, выводим значение на экран цветом TEXT_SEL
-//  else tft.drawText(dx,cy+128,tonebeep[Select8],TEXT);                              //иначе преобразуем значение счетчика Select8 в текст, выводим значение на экран цветом TEXT
-//  if (Select4>Select5) Select4=Select5;                                             //
-//
-//} while (ExitMenu==0);                                                              //выполняем цикл, когда счетчик позиций меньше 9
-//
-//EEPROM.update(1,Select1); EEPROM.update(2,Select2); EEPROM.update(3,Select3);       //заносим новые значение в ЕЕПРОМ, если они были изменены
-//EEPROM.put(4,Select4);    EEPROM.put(8,Select5);    EEPROM.update(12,Select6);      //-------------------------------------------------------
-//EEPROM.update(13,PWRstep);EEPROM.update(14,Select8);                                //-------------------------------------------------------
-//    val_clock=0; val_power=0; flag_power=0; flag_scale=1;                           //обнуляем счетчик val_clock, флаги val_power и flag_power, флаг шкалы в 1
-//  if (flag_clock==1) start_LCD();                                                   //если флаг flag_clock=1, запускаем подпрограмму start_LCD
-//  if (flag_clock==0) flag_clock=1;                                                  //если флаг flag_clock=0, изменяем его значение на 1
-//}//*****************************************************************************************
+//****************************** подпрограмма режимов управления передачей *****************************************
+void modeTx() {                                                           
+  lcd.clear();
+  lcd.print(" Trx control");
+  lcd.setCursor(1, 1);
+  lcd.print("MODE:");
+  lcd.setCursor(7,1);
+    switch (trxUprMode) {
+    case 0:
+      lcd.print("No(test)");
+      break;
+    case 1:
+      lcd.print("BLCKonly");
+      break;
+    case 2:
+      lcd.print("SelActTX");
+      break;
+    case 3:
+      lcd.print("2-autoTX");
+      break;
+  }
+  ++trxUprMode;
+  if (trxUprMode > 3) trxUprMode = 0;             //или = 1 чтобы вообще убрать тестовый режим
+  delay(100);                   //подбираем задержки
+  lcd.setCursor(7,1);
+    switch (trxUprMode) {
+    case 0:
+      lcd.print("No(test)");
+      break;
+    case 1:
+      lcd.print("BLK only");
+      break;
+    case 2:
+      lcd.print("SelActTX");
+      break;
+    case 3:
+      lcd.print("2-autoTX");
+      break;
+  }
+  EEPROM.update(1,trxUprMode);
+  delay(900);                   //подбираем задержки
+  start_LCD();
+}
+//*****************************************************************************************
