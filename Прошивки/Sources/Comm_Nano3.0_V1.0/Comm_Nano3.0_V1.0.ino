@@ -61,8 +61,10 @@ LiquidCrystal_I2C lcd(0x27,16,2);                                               
 
   boolean actTrx1 = true;                               //переменная показывает что активным для действий является трансивер 1. Если false - то трансивер 2
   boolean blockMode = true;                             //переменная определяет что включен режим блокировки коммутции 
+  boolean antBlockTx = false;                           //переменная определяет включен ли режим блокировки других антенн при передаче
   boolean onCommut = false;                             //флаг необходимости перекоммутации. Если true - выполняется блок коммутации
   boolean autoPa = false;                               //флаг автоматчиеского подключения усилителя к передающему каналу
+  boolean onInterrupt = false;                         //флаг наличия необработанного прерывания по любому входу
 
 // переменные блока опроса кнопок управления
   boolean press_flag = false;        
@@ -100,8 +102,8 @@ void setup() {
   pinMode(ant_key,INPUT);
 
 //**************прерывания на входах 2 и 3
-attachInterrupt(0, tx_on_block, LOW);
-attachInterrupt(1, tx_on_block, LOW);
+attachInterrupt(0, tx_interrupt, LOW);                 // возможно надо ПО ФРОНТУ - с высокого уровня на низкий!
+attachInterrupt(1, tx_interrupt, LOW);
   
 
 //  if (digitalRead(res)==LOW){                                                     //определяем состояние кнопки сброса res
@@ -117,9 +119,11 @@ attachInterrupt(1, tx_on_block, LOW);
 //*****************************Заставка приветствия*********************************************
 lcd.init();                     
   lcd.backlight();                                                            // Включаем подсветку дисплея
-  lcd.print("Ant.commutator");
-  lcd.setCursor(8, 1);
-  lcd.print("LCD 1602");
+  lcd.clear();
+  lcd.print(" AutoAnt.Switch");
+  lcd.setCursor(2, 1);
+  lcd.print("v1.0 by R3TJL");
+  delay_ms (2000);
 
 trxUprMode=EEPROM.read(1);
 if (trxUprMode < 1 || trxUprMode > 3) {
@@ -132,6 +136,7 @@ if (trxUprMode < 1 || trxUprMode > 3) {
   trxUprMode = 0; 
   EEPROM.update(1,0);
 }
+start_LCD();
 
 }
 //=============================== Основной цикл программы =====================================
@@ -189,6 +194,60 @@ if (onCommut) {
   
 //***************************БЛОК ИНДИКАЦИИ***********************************************************************
 
+if (actTrx1) {
+  lcd.setCursor(0, 1); lcd.print(" ");
+  lcd.setCursor(0, 0); lcd.print(">");
+}
+else {
+  lcd.setCursor(0, 0); lcd.print(" ");
+  lcd.setCursor(0, 1); lcd.print(">");
+}
+
+lcd.setCursor(4, 0); lcd.print("--");
+lcd.setCursor(4, 1); lcd.print("--");
+
+switch(ant1) {
+  case 1:
+    lcd.setCursor(4, 0); lcd.print("A1");
+    break;
+  case 2:
+    lcd.setCursor(4, 2); lcd.print("A1");
+    break;
+}
+switch(ant2) {
+  case 1:
+    lcd.setCursor(4, 0); lcd.print("A2");
+    break;
+  case 2:
+    lcd.setCursor(4, 2); lcd.print("A2");
+    break;
+}
+switch(ant3) {
+  case 1:
+    lcd.setCursor(4, 0); lcd.print("A3");
+    break;
+  case 2:
+    lcd.setCursor(4, 2); lcd.print("A3");
+    break;
+}
+
+lcd.setCursor(7, 0); lcd.print("--");
+lcd.setCursor(7, 1); lcd.print("--");
+switch (paLine) {
+  case 1:
+    lcd.setCursor(7, 0); lcd.print("PA");
+    break;
+}
+if (autoPa & paLine != 0) lcd.print("Au");
+else if (paLine != 0) lcd.print("PA");
+
+lcd.setCursor(14,0);
+if (blockMode) lcd.print("BL");
+else lcd.print("sw");
+
+lcd.setCursor(14,1);
+if (antBlockTx) lcd.print("BL");
+else lcd.print("on");
 
 //***************************конец БЛОКА ИНДИКАЦИИ****************************************************************
 
@@ -229,6 +288,7 @@ if (onCommut) {
       last_press = millis();          // присвоить текущее время переменной last_press
       // Сюда вписываем события неоходимые при длительном нажатии на кнопку
       key_mode = 6;
+      autoPa = !autoPa;           //меняем состяние режима автоподключения УМ
       beeper_long();
     }
     else if (value > 900 && last_value < 100 && press_flag == true && long_press_flag == false) {
@@ -262,7 +322,7 @@ if (onCommut) {
       last_press = millis();          // присвоить текущее время переменной last_press
       // Сюда вписываем события неоходимые при длительном нажатии на кнопку
       key_mode = 5; 
-      blockMode = !blockMode;     //*****меняем переменную, циклично переключаем режим коммутации: блокировка <-> переключение. Можно вынести в логический блок
+      blockMode = !blockMode;     //меняем переменную, циклично переключаем режим коммутации: блокировка <-> переключение. Можно вынести в логический блок
       beeper_long();
     }
     else if (value > 900 && last_value > 100 && last_value < 400 && press_flag == true && long_press_flag == false) {
@@ -272,7 +332,7 @@ if (onCommut) {
       last_value = 1023;
       // сюда вписываем события неоходимые при коротком нажатии на кнопку
       key_mode = 2; 
-      actTrx1 = !actTrx1;         //*** меняем переменную - циклично выбираем активнвм трансивер 1 или 2. Можно вынести в логический блок
+      actTrx1 = !actTrx1;         //меняем переменную - циклично выбираем активнвм трансивер 1 или 2. Можно вынести в логический блок
       beeper();
     }
       //если нажата кнопка 1 (Реж.)
@@ -298,246 +358,65 @@ if (onCommut) {
       last_value = 1023;
       // сюда вписываем события неоходимые при коротком нажатии на кнопку
       key_mode = 1;
+      antBlockTx = !antBlockTx;  //меняем режим блокировки прочих антенн при передаче
       beeper();
     }
 //************************конец блока опроса кнопок управления *****************************************
 
 
+//************************Блок логики и безопасности ***************************************************
 
 
-//    int U1=0,U2=0;                                                                //назначаем переменные прямой и обратной волны
-//    const int COUNT = 10;                                                         //назначаем константу кол-во измерений
-//  for (byte i=0; i<COUNT; i++){                                                   //включаем цикл измерения
-//    U1 +=  A0_Read;                                                               //суммируем значения U1 с порта А0
-//    U2 +=  A1_Read;}                                                              //суммируем значения U2 с порта А1
-//    U1 = U1 / COUNT;                                                              //усредняем значение U1
-//    U2 = U2 / COUNT;                                                              //усредняем значение U2
-//  if (U1<10) U1=0;                                                                //ограничение малых значений U1
-//  if (U2<10) U2=0;                                                                //ограничение малых значений U2
-//
-//switch(button1.Loop()){                                                           //определяем состояние кнопки 1
-//  case SB_CLICK: beeper(); U1=10; break;                                          //по короткому нажатию запускаем бипер, уст. U1=10
-//  case SB_LONG_CLICK: beeper(); menu(); break;}                                   //по длинному нажатию запускаем бипер, вход в меню установок
-//
-//switch(button2.Loop()){                                                           //определяем состояние кнопки 2
-//  case SB_CLICK: beeper(); U1=10; break;                                          //по короткому нажатию запускаем бипер, уст. U1=10
-//  case SB_LONG_CLICK: beeper(); menu(); break;}                                   //по длинному нажатию запускаем бипер, вход в меню установок
-//  
-//  if (flag_clock==0){                                                             //режим заставки
-//    int cx=5;                                                                     //начальная координата по х для вывода текста
-//    int cy=60;                                                                    //начальная координата по y для вывода текста
-//    tft.drawGFXText(cx,cy,"SWR & PWR-Meter v.2",COLOR_RED);                       //выводим текст "SWR & PWR-Meter v.2" красным цветом
-//    tft.drawGFXText(cx+25,cy+30,"Snezhnoe, 2019",COLOR_RED);                      //выводим текст "Snezhnoe, 2018" красным цветом
-//    tft.drawGFXText(cx+75,cy+60,"D0ISM",COLOR_RED);}                               //выводим текст "D0ISM" красным цветом
-//  
-//  if (flag_clock==1){                                                             //в режиме измерения
-//  if (LCD==1){LCD++; start_LCD();}                                                //однократное выполнение очистки ЖКИ и запускаем экран
-//    swr(U1,U2);                                                                   //вызываем подпрограмму расчета и вывода КСВ
-//    pwr (U1);}                                                                     //вызываем подпрограмму расчета и вывода мощности прямой волны
-//    temp();
-////************************* Управление индикацией ЖКИ **********************************
-//  if ((U1<10)&&(flag_clock==1)){                                                  //если напряжение прямой волны U1 меньше 10 и в режиме измерения
-//  if (millis()-clockMillis>=1){clockMillis=millis(); val_clock++;}                //начинаем считать время, увеличиваем val_clock каждую миллисекунду
-//  if ((clockTime-val_clock<=Bmax)&&(clockTime-val_clock>=Bmin)){                  //при равенстве счетчика val_clock до зн-я Bmax и до Bmin
-//    tft.setBacklightBrightness(clockTime-val_clock);}}                            //уменьшаем яркость подсветки с каждым значением val_clock
-//  else {val_clock=0;}                                                             //иначе обнуляем счетчик val_clock
-//  if (val_clock>=clockTime){                                                      //если счетчик val_clock сравнялся со значением clockTime
-//    val_clock=0; flag_clock=0; LCD=1; tft.clear();}                               //обнуляем счетчик val_clock, режим заставки, взводим счетчик LCD, очистка ЖКИ
-//  if (U1>=10){flag_clock=1; tft.setBacklightBrightness(Bmax);}                    //если напряжение прямой волны U1>=10, переходим в режим измерения, яркость подсветки Bmax
+
+
+
+//************************КОнец логического блока *****************************************************
+
 End
 }
 //===============================================================================================
 
 
-//******************************* Подпрограмма расчета и вывода КСВ ***************************************************************  
-
-////************************** Подпрограмма расчета и вывода мощности прямой волны ***************************************************
-//void pwr (float U1){                                                              //подпрограмма мощности прямой волны с привязкой по U1
-//    char buf[4]; byte len = 4;
-//    int R,G,B;                                                                    //переменные цветов
-//  if (flag_power==0){                                                             //проверяем флаг состояния мощности
-//  if (flag_scale==1){flag_scale++;                                                //проверяем флаг состояния шкалы, увеличиваем его на 1
-//    tft.fillRectangle(5,122,215,136,COLOR_BLACK);                                 //стираем старую шкалу черным цветом
-//
-//  if (Scale_low==0){                                                              //если выбрана входная шкала 0
-//    tft.drawGFXText(6,  135, "0", COLOR_SCALE);                                   //выводим текст "0"
-//    tft.drawGFXText(48, 135, "5", COLOR_SCALE);                                   //выводим текст "10"
-//    tft.drawGFXText(94, 135, "10", COLOR_YELLOW);                                 //выводим текст "20"
-//    tft.drawGFXText(144,135, "15", COLOR_ORANGE);                                 //выводим текст "30"
-//    tft.drawGFXText(190,135, "20", COLOR_RED);}                                   //выводим текст "40"
-//
-//  if (Scale_low==1){                                                              //если выбрана входная шкала 1
-//    tft.drawGFXText(6,  135, "0", COLOR_SCALE);                                   //выводим текст "0"
-//    tft.drawGFXText(44, 135, "10", COLOR_SCALE);                                  //выводим текст "10"
-//    tft.drawGFXText(94, 135, "20", COLOR_YELLOW);                                 //выводим текст "20"
-//    tft.drawGFXText(144,135, "30", COLOR_ORANGE);                                 //выводим текст "30"
-//    tft.drawGFXText(190,135, "40", COLOR_RED);}                                   //выводим текст "40"
-//
-//  if (Scale_low==2){                                                              //если выбрана входная шкала 2
-//    tft.drawGFXText(6,  135, "0", COLOR_SCALE);                                   //выводим текст "0"
-//    tft.drawGFXText(44, 135, "20", COLOR_SCALE);                                  //выводим текст "20"
-//    tft.drawGFXText(94, 135, "40", COLOR_YELLOW);                                 //выводим текст "40"
-//    tft.drawGFXText(144,135, "60", COLOR_ORANGE);                                 //выводим текст "60"
-//    tft.drawGFXText(190,135, "80", COLOR_RED);}                                   //выводим текст "80"
-//
-//  if (Scale_low==3){                                                              //если выбрана входная шкала 3
-//    tft.drawGFXText(6,  135, "0", COLOR_SCALE);                                   //выводим текст "0"
-//    tft.drawGFXText(44, 135, "30", COLOR_SCALE);                                  //выводим текст "40"
-//    tft.drawGFXText(94, 135, "60", COLOR_YELLOW);                                 //выводим текст "60"
-//    tft.drawGFXText(144,135, "90", COLOR_ORANGE);                                 //выводим текст "80"
-//    tft.drawGFXText(178,135, "120", COLOR_RED);}}                                 //выводим текст "120"
-//   
-//    V=((U1*5)/1022)*l;                                                            //приводим напряжение к мощности
-//    PWR=(V*V)/50;                                                                 //вычисляем мощность
-//    digitalWrite(DivPin,LOW);                                                     //устанавливаем низкий уровень делителя DivPin
-//  
-//  if (PWR<9.9){                                                                   //если мощность меньше 10Вт
-//    dtostrf(PWR, len, 1, buf);                                                    //преобразуем значение PWR в массив buf
-//    buf[len] = 'W'; buf[len+1] = 0;                                               //добавляем к массиву знак W
-//    tft.drawText(158,8,buf+String (' '),COLOR_GREEN);}                            //выводим значение мощности с пробелом в конце
-//
-//  if (PWR>=10){                                                                   //если мощность больше или равна 10Вт
-//    dtostrf(PWR, len, 0, buf);                                                    //преобразуем значение PWR в массив buf
-//    buf[len] = 'W'; buf[len+1] = 0;                                               //добавляем к массиву знак W
-//    tft.drawText(158,8,buf+String (' '),COLOR_GREEN);}                            //выводим значение мощности с пробелом в конце
-//  
-//  if (PWR>=PWRthreshold){flag_power=1; flag_scale=1; digitalWrite(DivPin,HIGH);}} //если мощность больше PWRthreshold, флаг шкалы 1, уст. 1 на внешнем делителе напряжения
-//
-//  if (flag_power==1){                                                             //проверяем флаг состояния мощности
-//  if (flag_scale==1){flag_scale++;                                                //проверяем флаг состояния шкалы, увеличиваем его на 1
-//    tft.fillRectangle(5,122,215,136,COLOR_BLACK);                                 //стираем старую шкалу черным цветом
-//
-//  if (Scale_hi==0){                                                               //если выбрана выходная шкала 0
-//    tft.drawGFXText(6,  135, "0", COLOR_SCALE);                                   //выводим текст "0"
-//    tft.drawGFXText(44, 135, "50", COLOR_SCALE);                                  //выводим текст "50"
-//    tft.drawGFXText(87, 135, "100", COLOR_YELLOW);                                //выводим текст "100"
-//    tft.drawGFXText(137,135, "150", COLOR_ORANGE);                                //выводим текст "150"
-//    tft.drawGFXText(178,135, "200", COLOR_RED);}                                  //выводим текст "200"
-//
-//  if (Scale_hi==1){                                                               //если выбрана выходная шкала 1
-//    tft.drawGFXText(6,  135, "0", COLOR_SCALE);                                   //выводим текст "0"
-//    tft.drawGFXText(39, 135, "100", COLOR_SCALE);                                 //выводим текст "100"
-//    tft.drawGFXText(88, 135, "200", COLOR_YELLOW);                                //выводим текст "200"
-//    tft.drawGFXText(138,135, "300", COLOR_ORANGE);                                //выводим текст "300"
-//    tft.drawGFXText(178,135, "400", COLOR_RED);}                                  //выводим текст "400"
-//
-//  if (Scale_hi==2){                                                               //если выбрана выходная шкала 2
-//    tft.drawGFXText(6,  135, "0", COLOR_SCALE);                                   //выводим текст "0"
-//    tft.drawGFXText(38, 135, "150", COLOR_SCALE);                                 //выводим текст "150"
-//    tft.drawGFXText(88, 135, "300", COLOR_YELLOW);                                //выводим текст "300"
-//    tft.drawGFXText(138,135, "450", COLOR_ORANGE);                                //выводим текст "450"
-//    tft.drawGFXText(178,135, "600", COLOR_RED);}                                  //выводим текст "600"
-//
-//  if (Scale_hi==3){                                                               //если выбрана выходная шкала 3
-//    tft.drawGFXText(6,  135, "0", COLOR_SCALE);                                   //выводим текст "0"
-//    tft.drawGFXText(38, 135, "200", COLOR_SCALE);                                 //выводим текст "200"
-//    tft.drawGFXText(88, 135, "400", COLOR_YELLOW);                                //выводим текст "400"
-//    tft.drawGFXText(138,135, "600", COLOR_ORANGE);                                //выводим текст "600"
-//    tft.drawGFXText(178,135, "800", COLOR_RED);}                                  //выводим текст "800"
-//
-//  if (Scale_hi==4){                                                               //если выбрана выходная шкала 4
-//    tft.drawGFXText(6,  135, "0", COLOR_SCALE);                                   //выводим текст "0"
-//    tft.drawGFXText(38, 135, "250", COLOR_SCALE);                                 //выводим текст "250"
-//    tft.drawGFXText(88, 135, "500", COLOR_YELLOW);                                //выводим текст "500"
-//    tft.drawGFXText(138,135, "750", COLOR_ORANGE);                                //выводим текст "750"
-//    tft.drawGFXText(188,135, "1k", COLOR_RED);}}                                  //выводим текст "1k"
-//
-//    V=((U1*5)/1022)*k;                                                            //приводим напряжение к мощности 
-//    PWR=(V*V)/50;                                                                 //вычисляем мощность
-//  if (PWR>=PWRround*10){int PWR1=PWR/PWRstep; PWR=PWR1*PWRstep;}                  //свыше PWRround показания мощности приводим кратно PWRstep
-//    dtostrf(PWR, len, 0, buf);                                                    //преобразуем значение PWR в массив buf
-//    buf[len] = 'W'; buf[len+1] = 0;                                               //добавляем к массиву знак W
-//    tft.drawText(153,8,buf+String (' '),COLOR_GREEN);}                            //выводим значение мощности
-
-
-//********************************* Подготовка экрана ******************************************
-//void start_LCD(){
-//    tft.clear();                                                                  //очищаем экран
-//    View_scale=EEPROM.read(1);                                                    //читаем данные с 1 ячейки памяти вида шкалы
-//    Scale_low= EEPROM.read(2);                                                    //читаем данные с 2 ячейки памяти масштаб малой мощности
-//    Scale_hi=  EEPROM.read(3);                                                    //читаем данные с 3 ячейки памяти масштаб большой мощности
-//    EEPROM.get(4,SWRlow);                                                         //читаем данные с 4 по 7 ячейки памяти значение сигнализации SWRlow
-//    EEPROM.get(8,SWRhi);                                                          //читаем данные с 8 по 11 ячейки памяти срабатывания сигнализации SWRhi
-//    PWRround=  EEPROM.read(12);                                                   //читаем данные с 12 ячейки памяти предела мощности округления
-//    PWRstep=   EEPROM.read(13);                                                   //читаем данные с 13 ячейки памяти шага округления мощности
-//    Tone=      EEPROM.read(14);                                                   //читаем данные с 14 ячейки памяти значение тональности сигнала
-//                                                                                  //коэф. мощности и пороги переключения для малой и большой мощности
-//  if (Scale_low==0) {l=6.326; PWRthreshold=20;}                                   //малая мощность 20Вт, порог переключения 20Вт
-//  if (Scale_low==1) {l=8.945; PWRthreshold=40;}                                   //малая мощность 40Вт, порог переключения 40Вт
-//  if (Scale_low==2) {l=12.65; PWRthreshold=80;}                                   //малая мощность 80Вт, порог переключения 80Вт
-//  if (Scale_low==3) {l=15.495; PWRthreshold=120;}                                 //малая мощность 120Вт, порог переключения 120Вт
-//  if (Scale_hi==0){k=20;}                                                         //большая мощность 200Вт
-//  if (Scale_hi==1){k=28.285;}                                                     //большая мощность 400Вт
-//  if (Scale_hi==2){k=34.643;}                                                     //большая мощность 600Вт
-//  if (Scale_hi==3){k=40;}                                                         //большая мощность 800Вт
-//  if (Scale_hi==4){k=44.722;}                                                     //большая мощность 1000Вт
-//  for (int i=0; i<2; i++){                                                        //включаем цикл
-//    tft.drawRectangle(i, i, 219-i, 175-i, COLOR_DARKCYAN);                        //рисуем прямоугольник по внешнему контуру ЖКИ
-//    tft.drawLine(10,66+i,207,66+i,COLOR_SCALE);                                   //рисуем гориз. линию верхней шкалы
-//    tft.drawLine(10,111+i,207,111+i,COLOR_SCALE);                                 //рисуем гориз. линию нижней шкалы
-//    tft.drawLine(0,27+i,219,27+i,COLOR_DARKCYAN);                                 //рисуем верхнюю горизонтальную линию
-//    tft.drawLine(0,148+i,219,148+i,COLOR_DARKCYAN);                               //рисуем нижнюю горизонтальную линию
-//    tft.fillRectangle(10+195*i,61,12+195*i,67,COLOR_SCALE);                       //рисуем большие риски (крайние) верхней шкалы
-//    tft.fillRectangle(10+195*i,111,12+195*i,117,COLOR_SCALE);}                    //рисуем большие риски (крайние) нижней шкалы
-//    
-//  for (int i=0; i<19; i++){                                                       //включаем цикл
-//  if ((i!=4)&&(i!=14))                                                            //кроме 5-й и 15-й
-//    tft.fillRectangle(18+i*10,63,19+i*10,67,COLOR_SCALE);}                        //рисуем маленькие риски верхней шкалы
-//    
-//  for(int i=0; i<3; i++){
-//    tft.drawLine(10,88+i,207,88+i,COLOR_SCALE);                                   //рисуем горизонтальные линии между шкалами
-//    tft.fillRectangle(57+50*i,61,60+50*i,67,COLOR_SCALE);                         //рисуем большие риски верхней шкалы
-//    tft.fillRectangle(55+50*i,111,57+50*i,117,COLOR_SCALE);}                      //рисуем большие риски нижней шкалы
-//
-//  for(int i=0; i<4; i++){                                                         //включаем цикл
-//    tft.drawLine(31+50*i,111,31+50*i,116,COLOR_SCALE);}                           //рисуем маленькие риски нижней шкалы
-//    
-//    tft.drawGFXText(6,  55, "1",  COLOR_SCALE);                                   //выводим текст "1"
-//    tft.drawGFXText(46, 55, "1.5",COLOR_SCALE);                                   //выводим текст "1.5"
-//    tft.drawGFXText(104,55, "2",  COLOR_YELLOW);                                  //выводим текст "2"
-//    tft.drawGFXText(146,55, "2.5",COLOR_ORANGE);                                  //выводим текст "2.5"
-//    tft.drawGFXText(200,55, "3",  COLOR_RED);                                     //выводим текст "3"
-//
-//  if (Scale_low==0){                                                              //если выбрана входная шкала 1
-//    tft.drawGFXText(6,  135, "0", COLOR_SCALE);                                   //выводим текст "0"
-//    tft.drawGFXText(48, 135, "5", COLOR_SCALE);                                   //выводим текст "5"
-//    tft.drawGFXText(94, 135, "10", COLOR_YELLOW);                                 //выводим текст "10"
-//    tft.drawGFXText(144,135, "15", COLOR_ORANGE);                                 //выводим текст "15"
-//    tft.drawGFXText(190,135, "20", COLOR_RED);}                                   //выводим текст "20"
-//  
-//  if (Scale_low==1){                                                              //если выбрана входная шкала 2
-//    tft.drawGFXText(6,  135, "0", COLOR_SCALE);                                   //выводим текст "0"
-//    tft.drawGFXText(44, 135, "10", COLOR_SCALE);                                  //выводим текст "10"
-//    tft.drawGFXText(94, 135, "20", COLOR_YELLOW);                                 //выводим текст "20"
-//    tft.drawGFXText(144,135, "30", COLOR_ORANGE);                                 //выводим текст "30"
-//    tft.drawGFXText(190,135, "40", COLOR_RED);}                                   //выводим текст "40"
-//
-//  if (Scale_low==2){                                                              //если выбрана входная шкала 3
-//    tft.drawGFXText(6,  135, "0", COLOR_SCALE);                                   //выводим текст "0"
-//    tft.drawGFXText(44, 135, "20", COLOR_SCALE);                                  //выводим текст "20"
-//    tft.drawGFXText(94, 135, "40", COLOR_YELLOW);                                 //выводим текст "40"
-//    tft.drawGFXText(144,135, "60", COLOR_ORANGE);                                 //выводим текст "60"
-//    tft.drawGFXText(190,135, "80", COLOR_RED);}                                   //выводим текст "80"
-//
-//  if (Scale_low==3){                                                              //если выбрана входная шкала 4
-//    tft.drawGFXText(6,  135, "0", COLOR_SCALE);                                   //выводим текст "0"
-//    tft.drawGFXText(44, 135, "30", COLOR_SCALE);                                  //выводим текст "40"
-//    tft.drawGFXText(94, 135, "60", COLOR_YELLOW);                                 //выводим текст "60"
-//    tft.drawGFXText(144,135, "90", COLOR_ORANGE);                                 //выводим текст "80"
-//    tft.drawGFXText(178,135, "120", COLOR_RED);}                                  //выводим текст "120"
-//    
-//    tft.drawText(10,8,"SWR=",COLOR_SKYBLUE);                                      //выводим текст "SWR=", цвет голубой
-//    tft.drawText(110,8,"PWR=",COLOR_SKYBLUE);                                     //выводим текст "PWR=", цвет голубой
-//}
+//********************************* Подпрограмма Подготовка рабочего экрана ******************************************
+void start_LCD(){
+  lcd.clear();
+  lcd.print(" T1 -- -- Mod:");
+  lcd.setCursor(0, 1);
+  lcd.print(" T2 -- -- RxA:");
+  lcd.setCursor(0, 3); lcd.print(char(126)); 
+  lcd.setCursor(0, 6); lcd.print(char(127));
+  lcd.setCursor(1, 3); lcd.print(char(126)); 
+  lcd.setCursor(1, 6); lcd.print(char(127));
+}
+//******************************************************************************
 
 //**************************************** Обработчик прерываний ************************************
 // Прерывания отрабатываются по сигналу PTT на любом из двух портов от трансиверов
 // отрабатывается блокировка программы, в т.ч. любых переключений (кроме подключения усилителя в автоматическом режиме)
 // и запускается управление выходом на трансвиеры - в зависомости от значения переменной trx_upr_mode
 // Обязательна блокировка поступления прерывания от другого входа !!!!
-void tx_on_block() {
-  
+void tx_interrupt() {
+  onInterrupt = true;    
 }
+
+
+void tx_on_block() {
+  detachInterrupt(0); detachInterrupt(1);           //запрещаем все прерывания до выхода из обработчика
+  while (1) {
+    
+  }
+
+
+
+
+
+
+
+  
+  onInterrupt = false;                                                          //сброс флага наличия прерывания
+  attachInterrupt(0, tx_interrupt, LOW); attachInterrupt(1, tx_interrupt, LOW); //разрешаем прерывания (последняя команда)
+}
+
 
 //**************************************** Бипер ****************************************************
 void beeper(){                                                                
