@@ -22,6 +22,7 @@ LiquidCrystal_I2C lcd(0x27,16,2);                                               
 #define rel_6 7
 #define rel_7 4
 #define rel_8 12
+#define rel_9 13
 //*************Определяем имена прочих пинов входов и выходов***********************
 #define ptt1 2
 #define ptt2 3
@@ -32,25 +33,6 @@ LiquidCrystal_I2C lcd(0x27,16,2);                                               
 
 #define tone_beep 1000                                                              //тональность бипера (1000-1кгц)
 
-//#define DS_UPDATE_TIME 500                                                        //время цикла опроса датчика температуры
-//#define res 5                                                                     //порт D1, сброс (очистка) памяти 
-//#define FanPin 4                                                                  //порт D4 для подключения вентилятора охлаждения
-//#define TFanOn 40.0                                                               //температура включения вентилятора
-//#define TFanOff 35.0                                                              //температура выключения вентилятора
-//#define DivPin 12                                                                 //порт D12 для подключения делителя напряжения прямой и обратной шкалы
-//#define TFT_RST 7                                                                 //7 вывод Nano на RST ЖКИ
-//#define TFT_RS  8                                                                 //8 вывод Nano на RS ЖКИ
-//#define TFT_CS  10                                                                //10 вывод Nano на CS ЖКИ
-//#define TFT_SDI 11                                                                //11 вывод Nano на SDI ЖКИ
-//#define TFT_CLK 13                                                                //13 вывод Nano на CLK ЖКИ
-//#define TFT_LED 6                                                                 //6 вывод ШИМ для подсветки
-//#define Bmin 30                                                                   //уровень яркости во время заставки
-//#define Bmax 150                                                                  //уровень яркости во время измерения
-//#define COLOR_SCALE COLOR_WHITE                                                   //цвет шкалы линий КСВ и измерителя мощности
-//TFT_22_ILI9225 tft = TFT_22_ILI9225(TFT_RST, TFT_RS, TFT_CS, TFT_LED, Bmax);      //инициализация аппаратного SPI
-//TonePlayer tone1 (TCCR1A,TCCR1B,OCR1AH,OCR1AL,TCNT1H,TCNT1L);                     //используем порт D9 (Таймер 1) для подключения бипера и звуковой сигнализации (Nano)
-//SButton button1(2,20,500,1000,0);                                                 //назначаем кнопку 1 на порт D2
-//SButton button2(3,20,500,1000,250);                                               //назначаем кнопку 2 на порт D3
 
 //************************* Назначаем переменные ***********************************
 //  int Trc1, Trc2 = 0;                                                             //переменная состояния линий Трансивер1 и Трансивер2. 0 - не подкл. 1 - к А1. 2 - к А2. 3 - к А3
@@ -94,6 +76,7 @@ void setup() {
   pinMode(rel_6,OUTPUT);
   pinMode(rel_7,OUTPUT);
   pinMode(rel_8,OUTPUT);
+  pinMode(rel_9,OUTPUT);
 
   pinMode(ptt1,INPUT);
   pinMode(ptt2,INPUT);
